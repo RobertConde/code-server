@@ -1,0 +1,134 @@
+Index: code-server/lib/vscode/src/vs/server/node/serverServices.ts
+===================================================================
+--- code-server.orig/lib/vscode/src/vs/server/node/serverServices.ts
++++ code-server/lib/vscode/src/vs/server/node/serverServices.ts
+@@ -9,6 +9,7 @@ import * as path from '../../base/common/path.js';
+ import { IURITransformer } from '../../base/common/uriIpc.js';
+ import { getMachineId, getSqmMachineId, getDevDeviceId } from '../../base/node/id.js';
+ import { Promises } from '../../base/node/pfs.js';
++import { URI } from '../../base/common/uri.js';
+ import { ClientConnectionEvent, IMessagePassingProtocol, IPCServer, StaticRouter } from '../../base/parts/ipc/common/ipc.js';
+ import { ProtocolConstants } from '../../base/parts/ipc/common/ipc.net.js';
+ import { IConfigurationService } from '../../platform/configuration/common/configuration.js';
+@@ -65,7 +66,8 @@ import { IExtensionsProfileScannerService } from '../../platform/extensionManage
+ import { IUserDataProfilesService } from '../../platform/userDataProfile/common/userDataProfile.js';
+-import { NullPolicyService } from '../../platform/policy/common/policy.js';
++import { FilePolicyService } from '../../platform/policy/common/filePolicyService.js';
++import { LINUX_SYSTEM_POLICY_FILE_PATH } from '../../base/common/policy.js';
+ import { OneDataSystemAppender } from '../../platform/telemetry/node/1dsAppender.js';
+ import { LoggerService } from '../../platform/log/node/loggerService.js';
+@@ -149,7 +151,7 @@ export async function setupServerServices(connectionToken: ServerConnectionToken
+
+ 	// Configuration
+-	const configurationService = new ConfigurationService(environmentService.machineSettingsResource, fileService, new NullPolicyService(), logService);
++	const configurationService = new ConfigurationService(environmentService.machineSettingsResource, fileService, disposables.add(new FilePolicyService(URI.file(LINUX_SYSTEM_POLICY_FILE_PATH), fileService, logService)), logService);
+ 	services.set(IConfigurationService, configurationService);
+
+Index: code-server/lib/vscode/src/vs/server/node/webClientServer.ts
+===================================================================
+--- code-server.orig/lib/vscode/src/vs/server/node/webClientServer.ts
++++ code-server/lib/vscode/src/vs/server/node/webClientServer.ts
+@@ -28,6 +28,7 @@ import { IExtensionManifest } from '../../platform/extensions/common/extensions
+ import { ICSSDevelopmentService } from '../../platform/cssDev/node/cssDevService.js';
++import { LINUX_SYSTEM_POLICY_FILE_PATH } from '../../base/common/policy.js';
+
+ const textMimeType: { [ext: string]: string | undefined } = {
+@@ -371,6 +372,13 @@ export class WebClientServer {
+ 			} : undefined
+ 		};
+
++		let serverPolicies: Record<string, unknown> | undefined;
++		try {
++			const policyContent = await promises.readFile(LINUX_SYSTEM_POLICY_FILE_PATH, 'utf-8');
++			serverPolicies = JSON.parse(policyContent);
++		} catch { /* no policy file - fine */ }
++
+ 		const workbenchWebConfiguration = {
+ 			remoteAuthority,
+ 			serverBasePath: basePath,
+@@ -382,6 +390,7 @@ export class WebClientServer {
+ 			productConfiguration,
+-			callbackRoute: callbackRoute
++			callbackRoute: callbackRoute,
++			...(serverPolicies ? { policies: serverPolicies } : {})
+ 		};
+
+Index: code-server/lib/vscode/src/vs/workbench/browser/web.api.ts
+===================================================================
+--- code-server.orig/lib/vscode/src/vs/workbench/browser/web.api.ts
++++ code-server/lib/vscode/src/vs/workbench/browser/web.api.ts
+@@ -353,6 +353,11 @@ export interface IWorkbenchConstructionOptions {
+ 	readonly productConfiguration?: Partial<IProductConfiguration>;
+
+ 	/**
++	 * Server-provided policy values read from /etc/vscode/policy.json at startup.
++	 */
++	readonly policies?: Record<string, string | boolean | number>;
++
++	/**
+ 	 * Optional override for properties of the window indicator in the status bar.
+ 	 */
+ 	readonly windowIndicator?: IWindowIndicator;
+
+Index: code-server/lib/vscode/src/vs/workbench/browser/web.main.ts
+===================================================================
+--- code-server.orig/lib/vscode/src/vs/workbench/browser/web.main.ts
++++ code-server/lib/vscode/src/vs/workbench/browser/web.main.ts
+@@ -69,7 +69,10 @@ import { dirname, joinPath } from '../../base/common/resources.js';
+ import { IUserDataProfile, IUserDataProfilesService } from '../../platform/userDataProfile/common/userDataProfile.js';
+-import { IPolicyService } from '../../platform/policy/common/policy.js';
++import { AbstractPolicyService, IPolicyService, PolicyDefinition, PolicyValue } from '../../platform/policy/common/policy.js';
++import { IStringDictionary } from '../../base/common/collections.js';
++import { MultiplexPolicyService } from '../../platform/policy/common/multiplexPolicyService.js';
+ import { IRemoteExplorerService } from '../services/remote/common/remoteExplorerService.js';
+
+@@ -100,6 +103,18 @@ import { DefaultAccountService } from '../services/accounts/browser/defaultAccou
+ import { AccountPolicyService, IAccountPolicyGateService } from '../services/policies/common/accountPolicyService.js';
+
++class ServerFilePolicyService extends AbstractPolicyService implements IPolicyService {
++	constructor(private readonly staticPolicies: IStringDictionary<PolicyValue>) {
++		super();
++	}
++	protected async _updatePolicyDefinitions(policyDefinitions: IStringDictionary<PolicyDefinition>): Promise<void> {
++		for (const name in policyDefinitions) {
++			if (name in this.staticPolicies) {
++				this.policies.set(name, this.staticPolicies[name]);
++			}
++		}
++	}
++}
++
+ export interface IBrowserMainWorkbench {
+
+@@ -366,9 +381,13 @@ export class BrowserMain extends Disposable {
+
+ 		// Policies
+-		const policyService = new AccountPolicyService(logService, defaultAccountService);
+-		serviceCollection.set(IPolicyService, policyService);
+-		serviceCollection.set(IAccountPolicyGateService, policyService);
++		const accountPolicyService = this._register(new AccountPolicyService(logService, defaultAccountService));
++		const policyService: IPolicyService = this.configuration.policies
++			? this._register(new MultiplexPolicyService([new ServerFilePolicyService(this.configuration.policies as IStringDictionary<PolicyValue>), accountPolicyService], logService))
++			: accountPolicyService;
++		serviceCollection.set(IPolicyService, policyService);
++		serviceCollection.set(IAccountPolicyGateService, accountPolicyService);
+
+ 		const configurationService = await this.createWorkspaceAndDependentServices(serviceCollection, workspace, environmentService, userDataProfileService, userDataProfilesService, fileService, remoteAgentService, uriIdentityService, policyService, logService, loggerService, remoteAuthorityResolverService, productService);
+
+Index: code-server/lib/vscode/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts
+===================================================================
+--- code-server.orig/lib/vscode/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts
++++ code-server/lib/vscode/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts
+@@ -1778,7 +1778,12 @@ configurationRegistry.registerConfiguration({
+ 		[ChatConfiguration.AIDisabled]: {
+ 			type: 'boolean',
+ 			description: nls.localize('chat.disableAIFeatures', "Disable and hide built-in AI features provided by GitHub Copilot, including chat and inline suggestions."),
+ 			default: false,
+-			scope: ConfigurationScope.MACHINE,
++			scope: ConfigurationScope.MACHINE,
++			policy: {
++				name: 'DisableAIFeatures',
++				category: PolicyCategory.InteractiveSession,
++				minimumVersion: '4.127.0',
++			},
+ 		},
