@@ -1,0 +1,16 @@
+Index: code-server/lib/vscode/src/vs/workbench/contrib/chat/browser/chatSetup/chatSetupContributions.ts
+===================================================================
+--- code-server.orig/lib/vscode/src/vs/workbench/contrib/chat/browser/chatSetup/chatSetupContributions.ts
++++ code-server/lib/vscode/src/vs/workbench/contrib/chat/browser/chatSetup/chatSetupContributions.ts
+@@ -230,7 +230,10 @@ export class ChatSetupContribution exten
+ 					id: CHAT_SETUP_ACTION_ID,
+ 					title: ChatSetupTriggerAction.CHAT_SETUP_ACTION_LABEL,
+ 					category: CHAT_CATEGORY,
+-					f1: true,
++					menu: {
++						id: MenuId.CommandPalette,
++						when: ContextKeyExpr.not('config.chat.disableAIFeatures'),
++					},
+ 					precondition: ContextKeyExpr.or(
+ 						ChatContextKeys.Setup.hidden,
+ 						ChatContextKeys.Setup.disabledInWorkspace,
