@@ -1,0 +1,51 @@
+Re-scope AI, telemetry, and update settings to MACHINE level
+
+Pedagog exam environment requires that students cannot override these
+settings via User/settings.json. Changing the scope to MACHINE ensures
+the values set in Machine/settings.json are enforced server-side and
+are not overridable by the student.
+
+Settings changed:
+- chat.disableAIFeatures: WINDOW -> MACHINE
+- telemetry.telemetryLevel: APPLICATION -> MACHINE
+- update.mode: APPLICATION -> MACHINE
+
+Index: code-server/lib/vscode/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts
+===================================================================
+--- code-server.orig/lib/vscode/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts
++++ code-server/lib/vscode/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts
+@@ -1779,7 +1779,7 @@ configurationRegistry.registerConfiguration({
+ 			type: 'boolean',
+ 			description: nls.localize('chat.disableAIFeatures', "Disable and hide built-in AI features provided by GitHub Copilot, including chat and inline suggestions."),
+ 			default: false,
+-			scope: ConfigurationScope.WINDOW,
++			scope: ConfigurationScope.MACHINE,
+ 		},
+ 		[ChatConfiguration.TitleBarSignInEnabled]: {
+ 			type: 'boolean',
+Index: code-server/lib/vscode/src/vs/platform/telemetry/common/telemetryService.ts
+===================================================================
+--- code-server.orig/lib/vscode/src/vs/platform/telemetry/common/telemetryService.ts
++++ code-server/lib/vscode/src/vs/platform/telemetry/common/telemetryService.ts
+@@ -306,7 +306,7 @@ configurationRegistry.registerConfiguration({
+ 			'markdownDescription': getTelemetryLevelSettingDescription(),
+ 			'default': TelemetryConfiguration.ON,
+ 			'restricted': true,
+-			'scope': ConfigurationScope.APPLICATION,
++			'scope': ConfigurationScope.MACHINE,
+ 			'tags': ['usesOnlineServices', 'telemetry'],
+ 			'policy': {
+ 				name: 'TelemetryLevel',
+Index: code-server/lib/vscode/src/vs/platform/update/common/update.config.contribution.ts
+===================================================================
+--- code-server.orig/lib/vscode/src/vs/platform/update/common/update.config.contribution.ts
++++ code-server/lib/vscode/src/vs/platform/update/common/update.config.contribution.ts
+@@ -20,7 +20,7 @@ configurationRegistry.registerConfiguration({
+ 			type: 'string',
+ 			enum: ['none', 'manual', 'start', 'default'],
+ 			default: 'default',
+-			scope: ConfigurationScope.APPLICATION,
++			scope: ConfigurationScope.MACHINE,
+ 			description: localize('updateMode', "Configure whether you receive automatic updates. Requires a restart after change. The updates are fetched from a Microsoft online service."),
+ 			tags: ['usesOnlineServices'],
+ 			enumDescriptions: [
