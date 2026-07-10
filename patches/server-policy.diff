@@ -130,7 +130,7 @@ Index: code-server/lib/vscode/src/vs/workbench/contrib/chat/browser/chat.shared.
 @@ -1780,6 +1780,17 @@ configurationRegistry.registerConfigurat
  			description: nls.localize('chat.disableAIFeatures', "Disable and hide built-in AI features provided by GitHub Copilot, including chat and inline suggestions."),
  			default: false,
- 			scope: ConfigurationScope.MACHINE,
+ 			scope: ConfigurationScope.WINDOW,
 +			policy: {
 +				name: 'DisableAIFeatures',
 +				category: PolicyCategory.InteractiveSession,
