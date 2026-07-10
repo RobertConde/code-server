@@ -24,4 +24,5 @@ trusted-domains.diff
 signature-verification.diff
 copilot.diff
 machine-scope-settings.diff
+server-policy.diff
 app-name.diff
