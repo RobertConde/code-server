@@ -127,7 +127,7 @@ Index: code-server/lib/vscode/src/vs/workbench/contrib/chat/browser/chat.shared.
 ===================================================================
 --- code-server.orig/lib/vscode/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts
 +++ code-server/lib/vscode/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts
-@@ -1780,6 +1780,11 @@ configurationRegistry.registerConfigurat
+@@ -1780,6 +1780,17 @@ configurationRegistry.registerConfigurat
  			description: nls.localize('chat.disableAIFeatures', "Disable and hide built-in AI features provided by GitHub Copilot, including chat and inline suggestions."),
  			default: false,
  			scope: ConfigurationScope.MACHINE,
@@ -135,6 +135,12 @@ Index: code-server/lib/vscode/src/vs/workbench/contrib/chat/browser/chat.shared.
 +				name: 'DisableAIFeatures',
 +				category: PolicyCategory.InteractiveSession,
 +				minimumVersion: '4.127',
++				localization: {
++					description: {
++						key: 'chat.disableAIFeatures',
++						value: nls.localize('chat.disableAIFeatures', "Disable and hide built-in AI features provided by GitHub Copilot, including chat and inline suggestions."),
++					}
++				},
 +			},
  		},
  		[ChatConfiguration.TitleBarSignInEnabled]: {
