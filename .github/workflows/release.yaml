@@ -112,6 +112,12 @@ jobs:
         with:
           path: lib/vscode-reh-web-${{ env.VSCODE_TARGET }}
           key: vscode-build-${{ env.VSCODE_TARGET }}-${{ steps.vscode-hash.outputs.hash }}-${{ hashFiles('patches/*.diff') }}
+      - name: Restore lib/vscode/build node_modules cache
+        id: vscode-build-nm-cache
+        uses: actions/cache@v4
+        with:
+          path: lib/vscode/build/node_modules
+          key: vscode-build-nm-${{ hashFiles('lib/vscode/build/package-lock.json') }}
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version-file: .node-version
@@ -123,10 +129,12 @@ jobs:
       - name: Build
         env:
           VSCODE_CACHE_HIT: ${{ steps.vscode-cache.outputs.cache-hit }}
+          VSCODE_BUILD_NM_CACHE_HIT: ${{ steps.vscode-build-nm-cache.outputs.cache-hit }}
         run: |
-          cd lib/vscode/build
-          npm ci
-          cd ..
+          cd lib/vscode
+          if [ "$VSCODE_BUILD_NM_CACHE_HIT" != "true" ]; then
+            (cd build && npm ci)
+          fi
           source ./build/azure-pipelines/linux/setup-env.sh
           # Run preinstall script before root dependencies are installed
           # so that v8 headers are patched correctly for native modules.
