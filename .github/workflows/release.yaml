@@ -28,23 +28,40 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  package-linux:
-    name: ${{ format('linux-{0}', matrix.vscode_arch) }}
+  generate-matrix:
     runs-on: ubuntu-22.04
     if: >-
-      (!inputs.targets || contains(inputs.targets, format('linux-{0}', matrix.vscode_arch))) &&
-      ((github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true && startsWith(github.head_ref, 'update/')))
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true && startsWith(github.head_ref, 'update/'))
+    outputs:
+      linux: ${{ steps.set.outputs.linux }}
+      macos: ${{ steps.set.outputs.macos }}
+    steps:
+      - id: set
+        run: |
+          T="${{ inputs.targets }}"
+          linux='[]'
+          macos='[]'
+
+          include() { [ -z "$T" ] || [[ "$T" == *"$1"* ]]; }
+
+          if include linux-x64;    then linux=$(echo "$linux" | jq '. + [{"npm_arch":"x64","vscode_arch":"x64","package_arch":"amd64"}]');     fi
+          if include linux-arm64;  then linux=$(echo "$linux" | jq '. + [{"npm_arch":"arm64","vscode_arch":"arm64","package_arch":"arm64"}]');  fi
+          if include darwin-x64;   then macos=$(echo "$macos" | jq '. + [{"os":"macos-15-intel","vscode_target":"darwin-x64"}]');               fi
+          if include darwin-arm64; then macos=$(echo "$macos" | jq '. + [{"os":"macos-latest","vscode_target":"darwin-arm64"}]');               fi
+
+          echo "linux=$linux" >> $GITHUB_OUTPUT
+          echo "macos=$macos" >> $GITHUB_OUTPUT
+
+  package-linux:
+    needs: generate-matrix
+    name: ${{ format('linux-{0}', matrix.vscode_arch) }}
+    runs-on: ubuntu-22.04
+    if: needs.generate-matrix.outputs.linux != '[]'
 
     strategy:
       matrix:
-        include:
-          - npm_arch: x64
-            vscode_arch: x64
-            package_arch: amd64
-          - npm_arch: arm64
-            vscode_arch: arm64
-            package_arch: arm64
+        include: ${{ fromJSON(needs.generate-matrix.outputs.linux) }}
 
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -149,19 +166,15 @@ jobs:
           name: v${{ env.VERSION }}
 
   package-macos:
+    needs: generate-matrix
     name: ${{ matrix.vscode_target }}
     runs-on: ${{ matrix.os }}
-    if: >-
-      (!inputs.targets || contains(inputs.targets, matrix.vscode_target)) &&
-      ((github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true && startsWith(github.head_ref, 'update/')))
+    if: needs.generate-matrix.outputs.macos != '[]'
+
     strategy:
       matrix:
-        include:
-          - os: macos-15-intel
-            vscode_target: darwin-x64
-          - os: macos-latest
-            vscode_target: darwin-arm64
+        include: ${{ fromJSON(needs.generate-matrix.outputs.macos) }}
+
     env:
       VSCODE_TARGET: ${{ matrix.vscode_target }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
