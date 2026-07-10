@@ -6,6 +6,11 @@ on:
       version:
         type: string
         required: true
+      targets:
+        description: "Comma-separated targets to build (linux-x64,linux-arm64,darwin-x64,darwin-arm64). Empty builds all."
+        type: string
+        required: false
+        default: ""
   pull_request_target:
     types:
       - closed
@@ -27,8 +32,9 @@ jobs:
     name: ${{ format('linux-{0}', matrix.vscode_arch) }}
     runs-on: ubuntu-22.04
     if: >-
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true && startsWith(github.head_ref, 'update/'))
+      (!inputs.targets || contains(inputs.targets, format('linux-{0}', matrix.vscode_arch))) &&
+      ((github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true && startsWith(github.head_ref, 'update/')))
 
     strategy:
       matrix:
@@ -80,6 +86,15 @@ jobs:
         with:
           submodules: true
       - run: quilt push -a
+      - name: Get VS Code submodule hash
+        id: vscode-hash
+        run: echo "hash=$(git -C lib/vscode rev-parse HEAD)" >> $GITHUB_OUTPUT
+      - name: Restore VS Code build cache
+        id: vscode-cache
+        uses: actions/cache@v4
+        with:
+          path: lib/vscode-reh-web-${{ env.VSCODE_TARGET }}
+          key: vscode-build-${{ env.VSCODE_TARGET }}-${{ steps.vscode-hash.outputs.hash }}-${{ hashFiles('patches/*.diff') }}
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version-file: .node-version
@@ -89,6 +104,8 @@ jobs:
             test/package-lock.json
 
       - name: Build
+        env:
+          VSCODE_CACHE_HIT: ${{ steps.vscode-cache.outputs.cache-hit }}
         run: |
           cd lib/vscode/build
           npm ci
@@ -100,7 +117,7 @@ jobs:
           cd ../..
           npm ci
           npm run build
-          npm run build:vscode
+          if [ "$VSCODE_CACHE_HIT" != "true" ]; then npm run build:vscode; fi
 
       # Platform-agnostic NPM package.
       - run: npm run release
@@ -135,8 +152,9 @@ jobs:
     name: ${{ matrix.vscode_target }}
     runs-on: ${{ matrix.os }}
     if: >-
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true && startsWith(github.head_ref, 'update/'))
+      (!inputs.targets || contains(inputs.targets, matrix.vscode_target)) &&
+      ((github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true && startsWith(github.head_ref, 'update/')))
     strategy:
       matrix:
         include:
@@ -174,6 +192,15 @@ jobs:
         with:
           submodules: true
       - run: quilt push -a
+      - name: Get VS Code submodule hash
+        id: vscode-hash
+        run: echo "hash=$(git -C lib/vscode rev-parse HEAD)" >> $GITHUB_OUTPUT
+      - name: Restore VS Code build cache
+        id: vscode-cache
+        uses: actions/cache@v4
+        with:
+          path: lib/vscode-reh-web-${{ env.VSCODE_TARGET }}
+          key: vscode-build-${{ env.VSCODE_TARGET }}-${{ steps.vscode-hash.outputs.hash }}-${{ hashFiles('patches/*.diff') }}
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version-file: .node-version
@@ -184,7 +211,9 @@ jobs:
 
       - run: npm ci
       - run: npm run build
-      - run: npm run build:vscode
+      - name: Build VS Code
+        if: steps.vscode-cache.outputs.cache-hit != 'true'
+        run: npm run build:vscode
       - run: KEEP_MODULES=1 npm run release
       - run: npm run test:native
 
