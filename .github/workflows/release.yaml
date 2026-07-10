@@ -45,10 +45,10 @@ jobs:
 
           include() { [ -z "$T" ] || [[ "$T" == *"$1"* ]]; }
 
-          if include linux-x64;    then linux=$(echo "$linux" | jq '. + [{"npm_arch":"x64","vscode_arch":"x64","package_arch":"amd64"}]');     fi
-          if include linux-arm64;  then linux=$(echo "$linux" | jq '. + [{"npm_arch":"arm64","vscode_arch":"arm64","package_arch":"arm64"}]');  fi
-          if include darwin-x64;   then macos=$(echo "$macos" | jq '. + [{"os":"macos-15-intel","vscode_target":"darwin-x64"}]');               fi
-          if include darwin-arm64; then macos=$(echo "$macos" | jq '. + [{"os":"macos-latest","vscode_target":"darwin-arm64"}]');               fi
+          if include linux-x64;    then linux=$(echo "$linux" | jq -c '. + [{"npm_arch":"x64","vscode_arch":"x64","package_arch":"amd64"}]');     fi
+          if include linux-arm64;  then linux=$(echo "$linux" | jq -c '. + [{"npm_arch":"arm64","vscode_arch":"arm64","package_arch":"arm64"}]');  fi
+          if include darwin-x64;   then macos=$(echo "$macos" | jq -c '. + [{"os":"macos-15-intel","vscode_target":"darwin-x64"}]');               fi
+          if include darwin-arm64; then macos=$(echo "$macos" | jq -c '. + [{"os":"macos-latest","vscode_target":"darwin-arm64"}]');               fi
 
           echo "linux=$linux" >> $GITHUB_OUTPUT
           echo "macos=$macos" >> $GITHUB_OUTPUT
