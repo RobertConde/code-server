@@ -134,7 +134,7 @@ Index: code-server/lib/vscode/src/vs/workbench/contrib/chat/browser/chat.shared.
 +			policy: {
 +				name: 'DisableAIFeatures',
 +				category: PolicyCategory.InteractiveSession,
-+				minimumVersion: '4.127.0',
++				minimumVersion: '4.127',
 +			},
  		},
  		[ChatConfiguration.TitleBarSignInEnabled]: {
